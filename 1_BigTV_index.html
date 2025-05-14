@@ -1,0 +1,256 @@
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+    let player;
+    let currentVideoIndex = 0;
+    let controlsTimeout;
+    let videoPlaylist = JSON.parse(localStorage.getItem('videoPlaylist')) || [
+        {
+            url: 'https://www.youtube.com/watch?v=6g4dkBF5anU',
+            title: 'Vídeo 1 - Exemplo',
+            duration: 300,
+            thumbnail: 'https://img.youtube.com/vi/6g4dkBF5anU/0.jpg',
+            startTime: new Date('2025-05-12T10:00:00').getTime()
+        },
+        {
+            url: 'https://www.youtube.com/watch?v=ysz5S6PUM-U',
+            title: 'Vídeo 2 - Exemplo',
+            duration: 600,
+            thumbnail: 'https://img.youtube.com/vi/ysz5S6PUM-U/0.jpg',
+            startTime: new Date('2025-05-12T10:05:00').getTime()
+        }
+    ];
+
+    function savePlaylist() {
+        localStorage.setItem('videoPlaylist', JSON.stringify(videoPlaylist));
+    }
+
+    function onYouTubeIframeAPIReady() {
+        player = new YT.Player('player', {
+            height: '100%',
+            width: '100%',
+            videoId: getVideoId(videoPlaylist[currentVideoIndex].url),
+            playerVars: {
+                autoplay: 1,
+                controls: 0,
+                mute: 0,
+                rel: 0,
+                showinfo: 0,
+                enablejsapi: 1
+            },
+            events: {
+                'onReady': onPlayerReady,
+                'onStateChange': onPlayerStateChange
+            }
+        });
+    }
+
+    function onPlayerReady(event) {
+        event.target.playVideo();
+        updateTimeDisplay();
+        showControls();
+        updatePlaylistTable();
+    }
+
+    function onPlayerStateChange(event) {
+        if (event.data === YT.PlayerState.ENDED) {
+            currentVideoIndex = (currentVideoIndex + 1) % videoPlaylist.length;
+            player.loadVideoById(getVideoId(videoPlaylist[currentVideoIndex].url));
+        }
+    }
+
+    function getVideoId(url) {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = url.match(regExp);
+        return (match && match[2].length === 11) ? match[2] : null;
+    }
+
+    function playPause() {
+        if (player.getPlayerState() === YT.PlayerState.PLAYING) {
+            player.pauseVideo();
+        } else {
+            player.playVideo();
+        }
+        showControls();
+    }
+
+    function toggleMute() {
+        if (player.isMuted()) {
+            player.unMute();
+        } else {
+            player.mute();
+        }
+        showControls();
+    }
+
+    function setVolume() {
+        const volume = document.getElementById('volume').value;
+        player.setVolume(volume);
+        showControls();
+    }
+
+    function updateTimeDisplay() {
+        const duration = videoPlaylist[currentVideoIndex].duration;
+        const currentTime = player.getCurrentTime();
+        const timeLeft = Math.max(0, duration - currentTime);
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = Math.floor(timeLeft % 60);
+        document.getElementById('timeDisplay').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        setTimeout(updateTimeDisplay, 1000);
+    }
+
+    function showControls() {
+        const controls = document.getElementById('controls');
+        controls.classList.remove('hidden');
+        clearTimeout(controlsTimeout);
+        controlsTimeout = setTimeout(() => {
+            controls.classList.add('hidden');
+        }, 15000);
+    }
+
+    function toggleSchedule() {
+        const schedule = document.getElementById('schedule');
+        const playerContainer = document.getElementById('playerContainer');
+        if (schedule.classList.contains('show')) {
+            schedule.classList.remove('show');
+            playerContainer.classList.remove('small');
+        } else {
+            schedule.classList.add('show');
+            playerContainer.classList.add('small');
+            updateSchedule();
+        }
+        showControls();
+    }
+
+    function updateSchedule() {
+        const schedule = document.getElementById('schedule');
+        schedule.innerHTML = '';
+        const now = new Date().getTime();
+        const next24Hours = now + 24 * 60 * 60 * 1000;
+        const nextVideos = videoPlaylist.filter(video => video.startTime >= now && video.startTime <= next24Hours);
+        nextVideos.forEach(video => {
+            const item = document.createElement('div');
+            item.className = 'schedule-item';
+            item.innerHTML = `
+                <img src="${video.thumbnail}" alt="${video.title}">
+                <span>${video.title} - ${new Date(video.startTime).toLocaleTimeString()}</span>
+            `;
+            schedule.appendChild(item);
+        });
+    }
+
+    function toggleAdminPanel() {
+        const adminPanel = document.getElementById('adminPanel');
+        if (adminPanel.classList.contains('show')) {
+            adminPanel.classList.remove('show');
+        } else {
+            adminPanel.classList.add('show');
+        }
+        showControls();
+    }
+
+    function addVideo() {
+        const url = document.getElementById('videoUrl').value;
+        const title = document.getElementById('videoTitle').value;
+        const duration = parseInt(document.getElementById('videoDuration').value);
+        const startTime = new Date(document.getElementById('videoStartTime').value).getTime();
+
+        if (!url || !getVideoId(url)) {
+            alert('Por favor, insira uma URL válida do YouTube.');
+            return;
+        }
+        if (!title || !duration || isNaN(duration) || !startTime || isNaN(startTime)) {
+            alert('Por favor, preencha todos os campos corretamente.');
+            return;
+        }
+
+        const video = {
+            url,
+            title,
+            duration,
+            thumbnail: `https://img.youtube.com/vi/${getVideoId(url)}/0.jpg`,
+            startTime
+        };
+
+        videoPlaylist.push(video);
+        videoPlaylist.sort((a, b) => a.startTime - b.startTime);
+        savePlaylist();
+        updatePlaylistTable();
+        updateSchedule();
+        clearForm();
+    }
+
+    function clearForm() {
+        document.getElementById('videoUrl').value = '';
+        document.getElementById('videoTitle').value = '';
+        document.getElementById('videoDuration').value = '';
+        document.getElementById('videoStartTime').value = '';
+    }
+
+    function updatePlaylistTable() {
+        const tbody = document.getElementById('playlistBody');
+        tbody.innerHTML = '';
+        videoPlaylist.forEach((video, index) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${video.title}</td>
+                <td>${new Date(video.startTime).toLocaleString()}</td>
+                <td><button onclick="removeVideo(${index})">Remover</button></td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+
+    function removeVideo(index) {
+        videoPlaylist.splice(index, 1);
+        savePlaylist();
+        updatePlaylistTable();
+        updateSchedule();
+        if (index <= currentVideoIndex) {
+            currentVideoIndex = Math.max(0, currentVideoIndex - 1);
+            player.loadVideoById(getVideoId(videoPlaylist[currentVideoIndex].url));
+        }
+    }
+
+    function exportPlaylist() {
+        const dataStr = JSON.stringify(videoPlaylist);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+        const exportFileDefaultName = 'bigtv_playlist.json';
+
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    }
+
+    function importPlaylist() {
+        const fileInput = document.getElementById('importPlaylist');
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Por favor, selecione um arquivo JSON.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedPlaylist = JSON.parse(e.target.result);
+                if (Array.isArray(importedPlaylist)) {
+                    videoPlaylist = importedPlaylist;
+                    savePlaylist();
+                    updatePlaylistTable();
+                    updateSchedule();
+                    currentVideoIndex = 0;
+                    player.loadVideoById(getVideoId(videoPlaylist[currentVideoIndex].url));
+                    alert('Playlist importada com sucesso!');
+                } else {
+                    alert('Arquivo JSON inválido.');
+                }
+            } catch (error) {
+                alert('Erro ao importar a playlist: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    document.getElementById('playerContainer').addEventListener('click', showControls);
+</script>
